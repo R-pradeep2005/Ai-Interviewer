@@ -44,9 +44,24 @@ from pipecat.services.groq.llm import GroqLLMService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.daily.transport import DailyParams
 from pipecat.workers.runner import WorkerRunner
+from pipecat.frames.frames import TTSSpeakFrame
 
 load_dotenv(override=True)
+GREETING = (
+    "Hi, I'm your AI interview trainer. "
+    "We'll do a short practice interview with four questions, "
+    "and I'll give you quick feedback at the end. "
+    "Speak naturally, and take your time if you need a pause. "
+    "Let's start. Tell me about a project you're proud of."
+)
 
+system_instruction=(
+    "You are an AI interview trainer running a short mock interview "
+    "in a voice conversation. Be warm, encouraging and professional. "
+    "Your words are spoken aloud, so use short sentences and no lists, "
+    "emojis or markdown. Ask one question at a time. "
+    "The interview has four questions, which you have already started."
+)
 
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> None:
     """Run the voice bot for this session.
@@ -76,7 +91,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         api_key=os.getenv("GROQ_API_KEY"),
         settings=GroqLLMService.Settings(
             model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
-            system_instruction="You are a helpful assistant in a voice conversation. Your responses will be spoken aloud, so avoid emojis, bullet points, or other formatting that can't be spoken. Respond to what the user said in a creative, helpful, and brief way.",
+            system_instruction=system_instruction,
         ),
     )
 
@@ -114,11 +129,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
 
     @worker.rtvi.event_handler("on_client_ready")
     async def on_client_ready(rtvi):
-        # Kick off the conversation
-        context.add_message(
-            {"role": "system", "content": "Start by concisely introducing yourself."}
-        )
-        await worker.queue_frames([LLMRunFrame()])
+        await worker.queue_frames([TTSSpeakFrame(GREETING)])
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
