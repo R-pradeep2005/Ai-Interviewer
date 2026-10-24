@@ -4,19 +4,10 @@
 # SPDX-License-Identifier: BSD 2-Clause License
 #
 
-"""pipecat-quickstart - Pipecat Voice Agent
+"""TrainerTwin - mock interview voice agent.
 
-This bot uses a cascade pipeline: Speech-to-Text → LLM → Text-to-Speech
-
-Required AI services:
-- Deepgram (Speech-to-Text)
-- Groq (LLM)
-- Cartesia (Text-to-Speech)
-
-Required environment variables:
-- DEEPGRAM_API_KEY
-- GROQ_API_KEY
-- CARTESIA_API_KEY
+Cascade pipeline: Deepgram (STT) -> Groq (LLM) -> Cartesia (TTS),
+with the interview structure handled by Pipecat Flows (see interview_flow.py).
 
 Run the bot using::
 
@@ -28,7 +19,7 @@ import os
 from dotenv import load_dotenv
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.frames.frames import LLMRunFrame
+from pipecat.flows import FlowManager
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -44,41 +35,20 @@ from pipecat.services.groq.llm import GroqLLMService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.daily.transport import DailyParams
 from pipecat.workers.runner import WorkerRunner
-from pipecat.frames.frames import TTSSpeakFrame
+
+from interview_flow import init_state, initial_node
 
 load_dotenv(override=True)
-GREETING = (
-    "Hi, I'm your AI interview trainer. "
-    "We'll do a short practice interview with four questions, "
-    "and I'll give you quick feedback at the end. "
-    "Speak naturally, and take your time if you need a pause. "
-    "Let's start. Tell me about a project you're proud of."
-)
 
-system_instruction=(
-    "You are an AI interview trainer running a short mock interview "
-    "in a voice conversation. Be warm, encouraging and professional. "
-    "Your words are spoken aloud, so use short sentences and no lists, "
-    "emojis or markdown. Ask one question at a time. "
-    "The interview has four questions, which you have already started."
-)
 
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> None:
-    """Run the voice bot for this session.
-
-    Args:
-        transport: The transport for this session, built by ``create_transport``
-            (or by hand for the dial-out/SIP production flows).
-        runner_args: Runner session arguments. Carries the request ``body``
-            (e.g. dial-out settings, SIP call details) and ``session_id``; the
-            standard web/telephony pipelines don't need it.
-    """
+    """Run the interview bot for this session."""
     logger.info("Starting bot")
 
-    # Speech-to-Text service
+    # Speech-to-Text
     stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"))
 
-    # Text-to-Speech service
+    # Text-to-Speech
     tts = CartesiaTTSService(
         api_key=os.getenv("CARTESIA_API_KEY"),
         settings=CartesiaTTSService.Settings(
@@ -86,22 +56,24 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         ),
     )
 
-    # LLM service (Groq)
+    # LLM (Groq). The persona/system prompt comes from the Flows node
+    # (role_message), so none is set here.
     llm = GroqLLMService(
         api_key=os.getenv("GROQ_API_KEY"),
         settings=GroqLLMService.Settings(
             model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
-            system_instruction=system_instruction,
         ),
     )
 
     context = LLMContext()
-    user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
+    # Keep the pair object: FlowManager needs .user() and .assistant().
+    context_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
     )
+    user_aggregator = context_aggregator.user()
+    assistant_aggregator = context_aggregator.assistant()
 
-    # Pipeline - assembled from reusable components
     pipeline = Pipeline(
         [
             transport.input(),
@@ -123,13 +95,22 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         observers=[],
     )
 
-    runner = WorkerRunner(handle_sigint=runner_args.handle_sigint)
+    # Interview structure: one node per question, feedback at the end.
+    flow_manager = FlowManager(
+        worker=worker,
+        llm=llm,
+        context_aggregator=context_aggregator,
+        transport=transport,
+    )
 
+    runner = WorkerRunner(handle_sigint=runner_args.handle_sigint)
     await runner.add_workers(worker)
 
     @worker.rtvi.event_handler("on_client_ready")
     async def on_client_ready(rtvi):
-        await worker.queue_frames([TTSSpeakFrame(GREETING)])
+        # Greets, asks question 1 and starts the interview flow.
+        init_state(flow_manager)
+        await flow_manager.initialize(initial_node())
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
