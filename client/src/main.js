@@ -185,7 +185,7 @@ async function start() {
   resetTurns();
 
   client = createClient();
-  try {
+   try {
     const res = await fetch(`${BOT_URL}/start`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -195,9 +195,18 @@ async function start() {
     const data = await res.json();
     console.log("start response:", data);
 
-    // make sure the URL uses ws:// or wss://
-    let wsUrl = data.wsUrl.replace(/^http:/, "ws:").replace(/^https:/, "wss:");
-    if (location.protocol === "https:") wsUrl = wsUrl.replace(/^ws:/, "wss:");
+    // take only the path from the server's answer; build host and scheme from BOT_URL
+    let path = "/ws-client";
+    if (data.wsUrl) {
+      try {
+        const u = new URL(data.wsUrl, BOT_URL);
+        path = u.pathname + u.search;
+      } catch {
+        path = data.wsUrl;
+      }
+    }
+    const wsUrl = BOT_URL.replace(/^http/, "ws") + path;
+    console.log("connecting to:", wsUrl);
 
     await client.connect({ wsUrl });
     toggleBtn.textContent = "End interview";
@@ -207,7 +216,7 @@ async function start() {
     console.error(e);
     client = null;
     setStatus("Couldn't connect", "error");
-    addMessage("note", `Couldn't reach the bot at ${BOT_URL}. Check that it's running, then try again.`);
+    addMessage("note", `Couldn't connect: ${e?.message || e}`);
     toggleBtn.disabled = false;
   }
 }
