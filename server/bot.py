@@ -37,6 +37,8 @@ from pipecat.transports.daily.transport import DailyParams
 from pipecat.workers.runner import WorkerRunner
 
 from interview_flow import init_state, initial_node
+from pipecat.serializers.protobuf import ProtobufFrameSerializer
+from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
 
 load_dotenv(override=True)
 
@@ -128,15 +130,15 @@ async def bot(runner_args: RunnerArguments):
     """Main bot entry point."""
 
     transport_params = {
-        "daily": lambda: DailyParams(
-            audio_in_enabled=True,
-            audio_out_enabled=True,
-        ),
-        "webrtc": lambda: TransportParams(
-            audio_in_enabled=True,
-            audio_out_enabled=True,
-        ),
-    }
+    "daily": lambda: DailyParams(audio_in_enabled=True, audio_out_enabled=True),
+    "webrtc": lambda: TransportParams(audio_in_enabled=True, audio_out_enabled=True),
+    "websocket": lambda: FastAPIWebsocketParams(
+        audio_in_enabled=True,
+        audio_out_enabled=True,
+        add_wav_header=False,
+        serializer=ProtobufFrameSerializer(),
+    ),
+}
 
     transport = await create_transport(runner_args, transport_params)
 
