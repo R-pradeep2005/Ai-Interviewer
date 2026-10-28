@@ -39,7 +39,6 @@ from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
 from pipecat.workers.runner import WorkerRunner
 
 from interview_flow import init_state, initial_node
-from takehome_metrics import build_takehome_observers
 
 load_dotenv(override=True)
 
@@ -95,7 +94,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
             enable_metrics=True,
             enable_usage_metrics=True,
         ),
-        observers=build_takehome_observers(),
+        observers=[],
     )
 
     # Interview structure: one node per question, feedback at the end.

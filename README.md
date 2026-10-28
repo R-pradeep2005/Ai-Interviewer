@@ -2,8 +2,6 @@
 
 Cascaded voice agent for a short mock interview: **Deepgram STT → Groq LLM → Cartesia TTS**, with interview structure in **Pipecat Flows** (`server/interview_flow.py`).
 
-See **`PROMPTS.md`** for full prompts and decision logic.
-
 ## Configuration
 
 - **Bot Type**: Web
@@ -60,17 +58,6 @@ npm run dev
 
 Point the client at your WebSocket bot URL.
 
-### Latency & transcript logs
-
-Each session writes **`latency.jsonl`** and **`transcript.txt`** at the repo root (override with `TAKEHOME_LOG_DIR`).
-
-```bash
-cd server
-uv run python scripts/summarize_latency.py
-```
-
-Format matches `latency.example.jsonl`. Timestamps are ms from client connect; `user_stopped_ms` uses VAD-adjusted silence (see `takehome_metrics.py`).
-
 ## Project Structure
 
 ```
@@ -78,10 +65,7 @@ Format matches `latency.example.jsonl`. Timestamps are ms from client connect; `
 ├── server/              # Pipecat bot
 │   ├── bot.py
 │   ├── interview_flow.py
-│   ├── takehome_metrics.py
 │   └── ...
-├── PROMPTS.md
-├── latency.example.jsonl
 └── README.md
 ```
 
